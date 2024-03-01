@@ -1,6 +1,13 @@
-Set the maximum number of command line arguments to _POSIX_ARG_MAX . Your shell should handle input commands of any length.
--> 目前沒有follow
+# Usage
+How to compile
+```
+make
+```
 
+test
+```
+python2 test/tester.py
+```
 
 
 # Notes

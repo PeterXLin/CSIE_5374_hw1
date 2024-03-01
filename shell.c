@@ -1,4 +1,7 @@
-#include <ctype.h>  // for isdigit
+#include <ctype.h>   // for isdigit
+#include <dirent.h>  // check folder exist
+#include <errno.h>   // check folder exist
+#include <signal.h>  // singal handler
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,7 +26,29 @@ void printDir() {
 }
 
 void customCdHandler(char** parsed) {
-    chdir(parsed[1]);
+    // printf("custom cd hanlder\n");
+    // handler not give address error
+    if (parsed[1] != NULL && parsed[2] != NULL) { /* more than one destination */
+        fprintf(stderr, "error: %s\n", "too much given dir");
+        return;
+    }
+
+    if (parsed[1] == NULL) {
+        fprintf(stderr, "error: %s\n", "not give dir");
+        return;
+    }
+
+    DIR* dir = opendir(parsed[1]);
+    if (dir) {
+        /* Directory exists. */
+        closedir(dir);
+        chdir(parsed[1]);
+    } else if (ENOENT == errno) {
+        fprintf(stderr, "error: %s\n", "directory not exist");
+    } else {
+        fprintf(stderr, "error: %s\n", "cann't check if directory exist");
+    }
+
     return;
 }
 
@@ -52,7 +77,6 @@ void printHistory(int number) {
             printf("%5d  %s", i + 1, comHistory[i]);
         }
     } else {
-        int printCount = 0;
         int modulus = (numberCommands - 1) % 10;
         int startIndex = modulus - number + 1;
 
@@ -101,20 +125,38 @@ void addHistory(char* inputStr) {
     // printf("finish adding history\n");
 }
 
-int customCommandHandler(char** parsed) {
-    // check command type, if input command is custom command, handle it and return 0
-    // else return status number 1
-
+int getCustomCommandIndex(char* command) {
+    /* if not a custom command return 0, else return command index(from 1 to n) */
     char* customCommandList[] = {"cd", "exit", "history"};  // if need to add more custom command, can add the command here
     int customCommandAmount = sizeof(customCommandList) / sizeof(char*);
     int commandIndex = 0;
 
     for (int i = 0; i < customCommandAmount; i++) {
-        if (strcmp(parsed[0], customCommandList[i]) == 0) {
+        if (strcmp(command, customCommandList[i]) == 0) {
             commandIndex = i + 1;
             break;
         }
     }
+
+    return commandIndex;
+}
+
+int customCommandHandler(char** parsed) {
+    // check command type, if input command is custom command, handle it and return 0
+    // else return status number 1
+
+    // char* customCommandList[] = {"cd", "exit", "history"};  // if need to add more custom command, can add the command here
+    // int customCommandAmount = sizeof(customCommandList) / sizeof(char*);
+    // int commandIndex = 0;
+
+    // for (int i = 0; i < customCommandAmount; i++) {
+    //     if (strcmp(parsed[0], customCommandList[i]) == 0) {
+    //         commandIndex = i + 1;
+    //         break;
+    //     }
+    // }
+
+    int commandIndex = getCustomCommandIndex(parsed[0]);
 
     switch (commandIndex) {  // call each command's handler
         case 1:
@@ -156,11 +198,25 @@ int parseCommandByPipe(char** str, char** firstCommand) {
     return 1; /* this command has pipe*/
 }
 
+int isFile(char* command) {
+    if (access(command, F_OK) != 0) return 0;
+
+    return 1;
+}
+
 void execSingleCommand(char* inputStr) {
     char* parsed[MAXARGS];
     parseCommandBySpace(inputStr, parsed);
 
     if (customCommandHandler(parsed)) return;
+
+    // printf("not a custom command\n");
+
+    // check if given command is a executable file
+    if (!isFile(parsed[0])) {
+        fprintf(stderr, "error: %s\n", "given commands is not a executable file");
+        return;
+    }
 
     pid_t pid;
 
@@ -249,6 +305,13 @@ void execPipedCommand2(char* inputStr) {
                 exit(0);
             }
 
+            // check if given command is a executable file
+            if (!isFile(parsed[0])) {
+                fprintf(stderr, "error: %s\n", "given commands is not a executable file");
+                exit(EXIT_FAILURE);
+            }
+
+            // printf("not a custom command\n");
             if (execvp(parsed[0], parsed) < 0) {
                 fprintf(stderr, "error: %s\n", "execvp error");
                 exit(EXIT_FAILURE);
@@ -266,20 +329,30 @@ void execPipedCommand2(char* inputStr) {
     return;
 }
 
+void sigint_handler(int sig) {
+    // Perform cleanup actions if needed
+    for (int i = 0; i < MAXHISTORY; i++) {
+        if (comHistory[i] != NULL) {
+            free(comHistory[i]);
+        }
+    }
+
+    exit(0);
+}
+
 int main() {
     char* inputStr;  // input commend
     size_t size = 0;
 
-    char* parsedArgs[MAXARGS];  // inputStr is a constant, may be safer than just use a char*?
-    // char* comHistory[MAXCOM];   // store history commend
-    // int numberCommands = 0;
-
-    int execFlag = 0;
-    char* pipedCommand;
+    /* signal handler */
+    if (signal(SIGINT, sigint_handler) == SIG_ERR) {
+        fprintf(stderr, "error: %s\n", "Error setting up signal handler for SIGINT");
+        exit(EXIT_FAILURE);
+    }
 
     while (1) {
         printf("$");
-        printDir();
+        // printDir();
 
         if (getline(&inputStr, &size, stdin) < 2) {  // inputStr include \n
             continue;
@@ -295,9 +368,8 @@ int main() {
         } else {
             execPipedCommand2(inputStr);
         }
+        free(inputStr);
     }
-
-    free(inputStr);
 
     return 0;
 }

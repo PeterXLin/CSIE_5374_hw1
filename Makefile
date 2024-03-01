@@ -1,4 +1,4 @@
-all: shell
+all: cs5374_sh
 
-shell:shell.c
-	gcc	-Wall -o shell shell.c
+cs5374_sh:shell.c
+	gcc	-Wall -o cs5374_sh shell.c
