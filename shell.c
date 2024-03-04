@@ -1,6 +1,8 @@
 #include <ctype.h>   // for isdigit
 #include <dirent.h>  // check folder exist
 #include <errno.h>   // check folder exist
+#include <errno.h>
+#include <limits.h>
 #include <signal.h>  // singal handler
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,7 +12,8 @@
 #include <unistd.h>
 
 #define MAXCOM 100000  // max length of a commend
-#define MAXARGS 4096   // _POSIX_ARG_MAX
+// #define _POSIX_ARG_MAX 4096   // _POSIX_ARG_MAX
+// getconf _POSIX_ARG_MAX
 #define MAXHISTORY 10  // max length of history
 
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
@@ -53,6 +56,9 @@ void customCdHandler(char** parsed) {
 }
 
 void customExitHandler(char** parsed) {
+    if (parsed[1] != NULL) {
+        fprintf(stderr, "error: %s\n", "unrecognized arguments");
+    }
     // printf("Eed shell\n");
     exit(0);
 }
@@ -96,6 +102,10 @@ void customHistoryHandler(char** parsed) {
     if (parsed[1] == NULL) {
         printHistory(MAXHISTORY);
     } else if (strcmp(parsed[1], "-c") == 0) {
+        if (parsed[2] != NULL) {
+            fprintf(stderr, "error: %s\n", "unrecognized arguments");
+        }
+
         for (int i = 0; i < MAXHISTORY; i++) {
             free(comHistory[i]);
             comHistory[i] = NULL;
@@ -179,7 +189,7 @@ int customCommandHandler(char** parsed) {
 
 // split command by space and store splited command
 void parseCommandBySpace(char* str, char** parsed) {
-    for (int i = 0; i < MAXARGS; i++) {
+    for (int i = 0; i < 4096; i++) {
         parsed[i] = strsep(&str, " ");  // strsep not only modify string but also modify the address of str
 
         if (parsed[i] == NULL) break;  // finish parsing commandbreak;
@@ -205,7 +215,7 @@ int isFile(char* command) {
 }
 
 void execSingleCommand(char* inputStr) {
-    char* parsed[MAXARGS];
+    char* parsed[4096];
     parseCommandBySpace(inputStr, parsed);
 
     if (customCommandHandler(parsed)) return;
@@ -254,7 +264,7 @@ void execPipedCommand2(char* inputStr) {
     // printf("input command: %s\n", inputStr);
     int numberPipes = countPipe(inputStr);  // pipe amount we need
     int pipes[numberPipes][2];
-    char* parsed[MAXARGS];
+    char* parsed[4096];
     // printf("Number of pipes: %d\n", numberPipes);
 
     for (int i = 0; i < numberPipes; i++) {
@@ -270,9 +280,9 @@ void execPipedCommand2(char* inputStr) {
         parseCommandBySpace(nextCommand, parsed);
         int pid;
 
-        if (strcmp(parsed[0], "exit") == 0) {
-            exit(EXIT_SUCCESS);
-        }
+        // if (strcmp(parsed[0], "exit") == 0) {
+        //     exit(EXIT_SUCCESS);
+        // }
 
         if ((pid = fork()) < 0) {
             fprintf(stderr, "error: %s\n", "fork error");
@@ -343,6 +353,7 @@ void sigint_handler(int sig) {
 int main() {
     char* inputStr;  // input commend
     size_t size = 0;
+    // printf("%ld", 4096);
 
     /* signal handler */
     if (signal(SIGINT, sigint_handler) == SIG_ERR) {

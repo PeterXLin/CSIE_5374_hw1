@@ -43,7 +43,18 @@ t.reset()
 ############################# Custom ##########################
 t.add_test("ls|grep shell", GENERAL_ERROR)
 t.add_test("history", "1  ls|grep shell\n    2  history")
+t.add_test("history -c 3", GENERAL_ERROR)
+t.add_test("history -80", GENERAL_ERROR)
+t.add_test("exit 1", GENERAL_ERROR)
 t.run()
 t.print_results()
 t.reset()
+
+# for i in range(20):
+#     t.add_test("echo {i}".format(i), "i")
+
+# t.add_test("history 1", "11  history")
+# t.run()
+# t.print_results()
+# t.reset()
 
