@@ -40,6 +40,7 @@ void cleanup_function() {
             free(comHistory[i]);
         }
     }
+    exit(0);
 }
 
 void customCdHandler(char** parsed) {
@@ -74,7 +75,7 @@ void customExitHandler(char** parsed) {
         fprintf(stderr, "error: %s\n", "unrecognized arguments");
     }
     // printf("Eed shell\n");
-    atexit(cleanup_function);
+    exit(0);
 }
 
 int isNumber(char* input) {
@@ -148,7 +149,7 @@ void addHistory(char* inputStr) {
     comHistory[(numberCommands - 1) % 10] = (char*)malloc(strlen(inputStr) + 1);
     if (comHistory == NULL) {
         fprintf(stderr, "error: %s\n", "malloc failed");
-        atexit(cleanup_function);
+        exit(EXIT_FAILURE);
     }
     strcpy(comHistory[(numberCommands - 1) % 10], inputStr);
     // printf("finish adding history\n");
@@ -238,7 +239,7 @@ void execSingleCommand(char* inputStr) {
     char** parsed = (char**)malloc(sysconf(_SC_ARG_MAX) * sizeof(char*));
     if (parsed == NULL) {
         fprintf(stderr, "error: %s\n", "malloc failed");
-        atexit(cleanup_function);
+        exit(EXIT_FAILURE);
     }
 
     parseCommandBySpace(inputStr, parsed);
@@ -262,7 +263,7 @@ void execSingleCommand(char* inputStr) {
     if ((pid = fork()) < 0) {  // pid = fork need to be enclosed by parentheses
         fprintf(stderr, "error: %s\n", "fork error");
         free(parsed);
-        atexit(cleanup_function);
+        exit(EXIT_FAILURE);
     } else if (pid > 0) { /* parent */
         wait(NULL);       // waiting for child process to terminate
         free(parsed);
@@ -271,7 +272,7 @@ void execSingleCommand(char* inputStr) {
         if (execvp(parsed[0], parsed) < 0) {
             fprintf(stderr, "error: %s\n", "execvp error");
             free(parsed);
-            atexit(cleanup_function);  // if execvp failed
+            exit(EXIT_FAILURE);  // if execvp failed
         }
     }
 }
@@ -300,7 +301,7 @@ void execPipedCommand2(char* inputStr) {
     char** parsed = (char**)malloc(sysconf(_SC_ARG_MAX) * sizeof(char*));
     if (parsed == NULL) {
         fprintf(stderr, "error: %s\n", "malloc failed");
-        atexit(cleanup_function);
+        exit(EXIT_FAILURE);
     }
     // printf("Number of pipes: %d\n", numberPipes);
 
@@ -308,7 +309,7 @@ void execPipedCommand2(char* inputStr) {
         if (pipe(pipes[i])) {
             fprintf(stderr, "error: %s\n", "pipe error");
             free(parsed);
-            atexit(cleanup_function);
+            exit(EXIT_FAILURE);
         }
     }
 
@@ -324,7 +325,7 @@ void execPipedCommand2(char* inputStr) {
 
         if ((pid = fork()) < 0) {
             fprintf(stderr, "error: %s\n", "fork error");
-            atexit(cleanup_function);
+            exit(EXIT_FAILURE);
         }
 
         if (pid == 0) {
@@ -332,7 +333,7 @@ void execPipedCommand2(char* inputStr) {
                 // printf("read from pipe");
                 if (dup2(pipes[commandCount - 1][0], STDIN_FILENO) != 0) {
                     fprintf(stderr, "error: %s\n", "dup2 error");
-                    atexit(cleanup_function);
+                    exit(EXIT_FAILURE);
                 }
             }
 
@@ -340,7 +341,7 @@ void execPipedCommand2(char* inputStr) {
                 // printf("write to pipe");
                 if (dup2(pipes[commandCount][1], STDOUT_FILENO) != 1) {
                     fprintf(stderr, "error: %s\n", "dup2 error");
-                    atexit(cleanup_function);
+                    exit(EXIT_FAILURE);
                 }
             }
 
@@ -356,14 +357,14 @@ void execPipedCommand2(char* inputStr) {
             // check if given command is a executable file
             if (!isFile(parsed[0])) {
                 fprintf(stderr, "error: %s\n", "given commands is not a executable file");
-                atexit(cleanup_function);
+                exit(EXIT_FAILURE);
             }
 
             // printf("not a custom command\n");
             if (execvp(parsed[0], parsed) < 0) {
                 fprintf(stderr, "error: %s\n", "execvp error");
 
-                atexit(cleanup_function);
+                exit(EXIT_FAILURE);
             }
         }
     }
@@ -390,6 +391,7 @@ int main() {
     size_t size = 0;
     // printf("%ld", 4096);
 
+    atexit(cleanup_function);
     /* signal handler */
     if (signal(SIGINT, sigint_handler) == SIG_ERR) {
         fprintf(stderr, "error: %s\n", "Error setting up signal handler for SIGINT");
