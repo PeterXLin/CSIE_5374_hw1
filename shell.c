@@ -11,13 +11,12 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#define MAXCOM 100000  // max length of a commend
 #define MAXHISTORY 10  // max length of history
 
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
-char* comHistory[MAXCOM];  // store history commend
+char* comHistory[MAXHISTORY];  // store history commend
 int numberCommands = 0;
 
 void printDir() {
@@ -50,8 +49,10 @@ void customCdHandler(char** parsed) {
     if (dir) {
         /* Directory exists. */
         closedir(dir);
-        chdir(parsed[1]);
-    } else if (ENOENT == errno) {
+        if (chdir(parsed[1]) != 0) {
+            fprintf(stderr, "error: %s\n", "failed to change directory\n");
+        }
+    } else if (errno == ENOENT) {
         fprintf(stderr, "error: %s\n", "directory not exist");
     } else {
         fprintf(stderr, "error: %s\n", "cann't check if directory exist");
@@ -62,7 +63,7 @@ void customCdHandler(char** parsed) {
 
 void customExitHandler(char** parsed) {
     if (parsed[1] != NULL) {
-        fprintf(stderr, "error: %s\n", "unrecognized arguments");
+        fprintf(stderr, "error: %s\n", "unexpected arguments");
         return;
     }
     // printf("Eed shell\n");
