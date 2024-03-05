@@ -19,6 +19,12 @@
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
+// #ifdef ARG_MAX
+// #define MY_ARG_MAX ARG_MAX
+// #else
+// long MY_ARG_MAX = sysconf(_SC_ARG_MAX);
+// #endif
+
 char* comHistory[MAXCOM];  // store history commend
 int numberCommands = 0;
 
@@ -26,6 +32,14 @@ void printDir() {
     char cwd[1024];
     getcwd(cwd, sizeof(cwd));
     printf("%s > ", cwd);
+}
+
+void cleanup_function() {
+    for (int i = 0; i < MAXHISTORY; i++) {
+        if (comHistory[i] != NULL) {
+            free(comHistory[i]);
+        }
+    }
 }
 
 void customCdHandler(char** parsed) {
@@ -60,7 +74,7 @@ void customExitHandler(char** parsed) {
         fprintf(stderr, "error: %s\n", "unrecognized arguments");
     }
     // printf("Eed shell\n");
-    exit(0);
+    atexit(cleanup_function);
 }
 
 int isNumber(char* input) {
@@ -104,6 +118,7 @@ void customHistoryHandler(char** parsed) {
     } else if (strcmp(parsed[1], "-c") == 0) {
         if (parsed[2] != NULL) {
             fprintf(stderr, "error: %s\n", "unrecognized arguments");
+            return;
         }
 
         for (int i = 0; i < MAXHISTORY; i++) {
@@ -131,6 +146,10 @@ void addHistory(char* inputStr) {
     }
 
     comHistory[(numberCommands - 1) % 10] = (char*)malloc(strlen(inputStr) + 1);
+    if (comHistory == NULL) {
+        fprintf(stderr, "error: %s\n", "malloc failed");
+        atexit(cleanup_function);
+    }
     strcpy(comHistory[(numberCommands - 1) % 10], inputStr);
     // printf("finish adding history\n");
 }
@@ -189,7 +208,7 @@ int customCommandHandler(char** parsed) {
 
 // split command by space and store splited command
 void parseCommandBySpace(char* str, char** parsed) {
-    for (int i = 0; i < 4096; i++) {
+    for (long i = 0; i < sysconf(_SC_ARG_MAX); i++) {
         parsed[i] = strsep(&str, " ");  // strsep not only modify string but also modify the address of str
 
         if (parsed[i] == NULL) break;  // finish parsing commandbreak;
@@ -215,16 +234,26 @@ int isFile(char* command) {
 }
 
 void execSingleCommand(char* inputStr) {
-    char* parsed[4096];
+    // char* parsed[sysconf(_SC_ARG_MAX)];
+    char** parsed = (char**)malloc(sysconf(_SC_ARG_MAX) * sizeof(char*));
+    if (parsed == NULL) {
+        fprintf(stderr, "error: %s\n", "malloc failed");
+        atexit(cleanup_function);
+    }
+
     parseCommandBySpace(inputStr, parsed);
 
-    if (customCommandHandler(parsed)) return;
+    if (customCommandHandler(parsed)) {
+        free(parsed);
+        return;
+    }
 
     // printf("not a custom command\n");
 
     // check if given command is a executable file
     if (!isFile(parsed[0])) {
         fprintf(stderr, "error: %s\n", "given commands is not a executable file");
+        free(parsed);
         return;
     }
 
@@ -232,14 +261,17 @@ void execSingleCommand(char* inputStr) {
 
     if ((pid = fork()) < 0) {  // pid = fork need to be enclosed by parentheses
         fprintf(stderr, "error: %s\n", "fork error");
-        return;
+        free(parsed);
+        atexit(cleanup_function);
     } else if (pid > 0) { /* parent */
         wait(NULL);       // waiting for child process to terminate
+        free(parsed);
         return;
     } else { /* child process */
         if (execvp(parsed[0], parsed) < 0) {
             fprintf(stderr, "error: %s\n", "execvp error");
-            exit(EXIT_FAILURE);  // if execvp failed
+            free(parsed);
+            atexit(cleanup_function);  // if execvp failed
         }
     }
 }
@@ -264,13 +296,19 @@ void execPipedCommand2(char* inputStr) {
     // printf("input command: %s\n", inputStr);
     int numberPipes = countPipe(inputStr);  // pipe amount we need
     int pipes[numberPipes][2];
-    char* parsed[4096];
+    // char* parsed[sysconf(_SC_ARG_MAX)];
+    char** parsed = (char**)malloc(sysconf(_SC_ARG_MAX) * sizeof(char*));
+    if (parsed == NULL) {
+        fprintf(stderr, "error: %s\n", "malloc failed");
+        atexit(cleanup_function);
+    }
     // printf("Number of pipes: %d\n", numberPipes);
 
     for (int i = 0; i < numberPipes; i++) {
         if (pipe(pipes[i])) {
             fprintf(stderr, "error: %s\n", "pipe error");
-            exit(EXIT_FAILURE);
+            free(parsed);
+            atexit(cleanup_function);
         }
     }
 
@@ -286,7 +324,7 @@ void execPipedCommand2(char* inputStr) {
 
         if ((pid = fork()) < 0) {
             fprintf(stderr, "error: %s\n", "fork error");
-            exit(EXIT_FAILURE);
+            atexit(cleanup_function);
         }
 
         if (pid == 0) {
@@ -294,7 +332,7 @@ void execPipedCommand2(char* inputStr) {
                 // printf("read from pipe");
                 if (dup2(pipes[commandCount - 1][0], STDIN_FILENO) != 0) {
                     fprintf(stderr, "error: %s\n", "dup2 error");
-                    exit(EXIT_FAILURE);
+                    atexit(cleanup_function);
                 }
             }
 
@@ -302,7 +340,7 @@ void execPipedCommand2(char* inputStr) {
                 // printf("write to pipe");
                 if (dup2(pipes[commandCount][1], STDOUT_FILENO) != 1) {
                     fprintf(stderr, "error: %s\n", "dup2 error");
-                    exit(EXIT_FAILURE);
+                    atexit(cleanup_function);
                 }
             }
 
@@ -318,13 +356,14 @@ void execPipedCommand2(char* inputStr) {
             // check if given command is a executable file
             if (!isFile(parsed[0])) {
                 fprintf(stderr, "error: %s\n", "given commands is not a executable file");
-                exit(EXIT_FAILURE);
+                atexit(cleanup_function);
             }
 
             // printf("not a custom command\n");
             if (execvp(parsed[0], parsed) < 0) {
                 fprintf(stderr, "error: %s\n", "execvp error");
-                exit(EXIT_FAILURE);
+
+                atexit(cleanup_function);
             }
         }
     }
@@ -335,18 +374,14 @@ void execPipedCommand2(char* inputStr) {
         wait(NULL);
     }
 
+    free(parsed);
     wait(NULL);  // all numberPipes + 1 child process
     return;
 }
 
 void sigint_handler(int sig) {
     // Perform cleanup actions if needed
-    for (int i = 0; i < MAXHISTORY; i++) {
-        if (comHistory[i] != NULL) {
-            free(comHistory[i]);
-        }
-    }
-
+    cleanup_function();
     exit(0);
 }
 
@@ -358,7 +393,7 @@ int main() {
     /* signal handler */
     if (signal(SIGINT, sigint_handler) == SIG_ERR) {
         fprintf(stderr, "error: %s\n", "Error setting up signal handler for SIGINT");
-        exit(EXIT_FAILURE);
+        exit(0);
     }
 
     while (1) {
