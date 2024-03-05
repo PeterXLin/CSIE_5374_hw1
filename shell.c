@@ -12,18 +12,10 @@
 #include <unistd.h>
 
 #define MAXCOM 100000  // max length of a commend
-// #define _POSIX_ARG_MAX 4096   // _POSIX_ARG_MAX
-// getconf _POSIX_ARG_MAX
 #define MAXHISTORY 10  // max length of history
 
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
-
-// #ifdef ARG_MAX
-// #define MY_ARG_MAX ARG_MAX
-// #else
-// long MY_ARG_MAX = sysconf(_SC_ARG_MAX);
-// #endif
 
 char* comHistory[MAXCOM];  // store history commend
 int numberCommands = 0;
@@ -40,11 +32,9 @@ void cleanup_function() {
             free(comHistory[i]);
         }
     }
-    exit(0);
 }
 
 void customCdHandler(char** parsed) {
-    // printf("custom cd hanlder\n");
     // handler not give address error
     if (parsed[1] != NULL && parsed[2] != NULL) { /* more than one destination */
         fprintf(stderr, "error: %s\n", "too much given dir");
@@ -73,6 +63,7 @@ void customCdHandler(char** parsed) {
 void customExitHandler(char** parsed) {
     if (parsed[1] != NULL) {
         fprintf(stderr, "error: %s\n", "unrecognized arguments");
+        return;
     }
     // printf("Eed shell\n");
     exit(0);
@@ -132,7 +123,7 @@ void customHistoryHandler(char** parsed) {
         // printf("number: %d\n", number);
         printHistory(number);
     } else {
-        fprintf(stderr, "error: %s\n", "history, invalid option");
+        fprintf(stderr, "error: %s\n", "unrecognized arguments");
     }
 
     return;
@@ -172,20 +163,6 @@ int getCustomCommandIndex(char* command) {
 }
 
 int customCommandHandler(char** parsed) {
-    // check command type, if input command is custom command, handle it and return 0
-    // else return status number 1
-
-    // char* customCommandList[] = {"cd", "exit", "history"};  // if need to add more custom command, can add the command here
-    // int customCommandAmount = sizeof(customCommandList) / sizeof(char*);
-    // int commandIndex = 0;
-
-    // for (int i = 0; i < customCommandAmount; i++) {
-    //     if (strcmp(parsed[0], customCommandList[i]) == 0) {
-    //         commandIndex = i + 1;
-    //         break;
-    //     }
-    // }
-
     int commandIndex = getCustomCommandIndex(parsed[0]);
 
     switch (commandIndex) {  // call each command's handler
@@ -245,11 +222,10 @@ void execSingleCommand(char* inputStr) {
     parseCommandBySpace(inputStr, parsed);
 
     if (customCommandHandler(parsed)) {
+        // input command is a custom command
         free(parsed);
         return;
     }
-
-    // printf("not a custom command\n");
 
     // check if given command is a executable file
     if (!isFile(parsed[0])) {
@@ -319,28 +295,27 @@ void execPipedCommand2(char* inputStr) {
         parseCommandBySpace(nextCommand, parsed);
         int pid;
 
-        // if (strcmp(parsed[0], "exit") == 0) {
-        //     exit(EXIT_SUCCESS);
-        // }
-
         if ((pid = fork()) < 0) {
             fprintf(stderr, "error: %s\n", "fork error");
+            free(parsed);
             exit(EXIT_FAILURE);
         }
 
         if (pid == 0) {
-            if (commandCount != 0) {
+            if (commandCount != 0) { /* not first command */
                 // printf("read from pipe");
                 if (dup2(pipes[commandCount - 1][0], STDIN_FILENO) != 0) {
                     fprintf(stderr, "error: %s\n", "dup2 error");
+                    free(parsed);
                     exit(EXIT_FAILURE);
                 }
             }
 
-            if (commandCount != numberPipes) {
+            if (commandCount != numberPipes) { /* not last command */
                 // printf("write to pipe");
                 if (dup2(pipes[commandCount][1], STDOUT_FILENO) != 1) {
                     fprintf(stderr, "error: %s\n", "dup2 error");
+                    free(parsed);
                     exit(EXIT_FAILURE);
                 }
             }
@@ -351,19 +326,21 @@ void execPipedCommand2(char* inputStr) {
             }
 
             if (customCommandHandler(parsed)) {
+                free(parsed);
                 exit(0);
             }
 
             // check if given command is a executable file
             if (!isFile(parsed[0])) {
                 fprintf(stderr, "error: %s\n", "given commands is not a executable file");
+                free(parsed);
                 exit(EXIT_FAILURE);
             }
 
             // printf("not a custom command\n");
             if (execvp(parsed[0], parsed) < 0) {
                 fprintf(stderr, "error: %s\n", "execvp error");
-
+                free(parsed);
                 exit(EXIT_FAILURE);
             }
         }
