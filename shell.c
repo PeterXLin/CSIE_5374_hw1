@@ -18,6 +18,8 @@
 #define MAXARGUMENT _POSIX_ARG_MAX
 
 char* comHistory[MAXHISTORY];  // store history commend
+char* parsed[MAXARGUMENT];
+char* inputStr;  // input commend
 int numberCommands = 0;
 
 void printDir() {
@@ -32,6 +34,11 @@ void cleanup_function() {
             free(comHistory[i]);
             comHistory[i] = NULL;
         }
+    }
+
+    if (inputStr != NULL) {
+        free(inputStr);
+        inputStr = NULL;
     }
 }
 
@@ -138,6 +145,7 @@ void addHistory(char* inputStr) {
     numberCommands++;
     if (comHistory[(numberCommands - 1) % 10] != NULL) {
         free(comHistory[(numberCommands - 1) % 10]);
+        comHistory[(numberCommands - 1) % 10] = NULL;
     }
 
     comHistory[(numberCommands - 1) % 10] = (char*)malloc(strlen(inputStr) + 1);
@@ -215,25 +223,15 @@ int isFile(char* command) {
 }
 
 void execSingleCommand(char* inputStr) {
-    // char* parsed[MAXARGUMENT];
-    char** parsed = (char**)malloc(MAXARGUMENT * sizeof(char*));
-    if (parsed == NULL) {
-        fprintf(stderr, "error: %s\n", "malloc failed");
-        exit(EXIT_FAILURE);
-    }
-
     parseCommandBySpace(inputStr, parsed);
 
     if (customCommandHandler(parsed)) {
-        // input command is a custom command
-        free(parsed);
         return;
     }
 
     // check if given command is a executable file
     if (!isFile(parsed[0])) {
-        fprintf(stderr, "error: %s\n", "given commands is not a executable file");
-        free(parsed);
+        fprintf(stderr, "error: %s\n", "given commands is not a executable file or custom command");
         return;
     }
 
@@ -241,16 +239,13 @@ void execSingleCommand(char* inputStr) {
 
     if ((pid = fork()) < 0) {  // pid = fork need to be enclosed by parentheses
         fprintf(stderr, "error: %s\n", "fork error");
-        free(parsed);
         exit(EXIT_FAILURE);
     } else if (pid > 0) { /* parent */
         wait(NULL);       // waiting for child process to terminate
-        free(parsed);
         return;
     } else { /* child process */
         if (execvp(parsed[0], parsed) < 0) {
             fprintf(stderr, "error: %s\n", "execvp error");
-            free(parsed);
             exit(EXIT_FAILURE);  // if execvp failed
         }
     }
@@ -273,21 +268,12 @@ int countPipe(char* inputStr) {
 
 void execPipedCommand2(char* inputStr) {
     // seem inputStr as a full str
-    // printf("input command: %s\n", inputStr);
     int numberPipes = countPipe(inputStr);  // pipe amount we need
     int pipes[numberPipes][2];
-    // char* parsed[MAXARGUMENT];
-    char** parsed = (char**)malloc(MAXARGUMENT * sizeof(char*));
-    if (parsed == NULL) {
-        fprintf(stderr, "error: %s\n", "malloc failed");
-        exit(EXIT_FAILURE);
-    }
-    // printf("Number of pipes: %d\n", numberPipes);
 
     for (int i = 0; i < numberPipes; i++) {
         if (pipe(pipes[i])) {
             fprintf(stderr, "error: %s\n", "pipe error");
-            free(parsed);
             exit(EXIT_FAILURE);
         }
     }
@@ -300,7 +286,6 @@ void execPipedCommand2(char* inputStr) {
 
         if ((pid = fork()) < 0) {
             fprintf(stderr, "error: %s\n", "fork error");
-            free(parsed);
             exit(EXIT_FAILURE);
         }
 
@@ -309,7 +294,6 @@ void execPipedCommand2(char* inputStr) {
                 // printf("read from pipe");
                 if (dup2(pipes[commandCount - 1][0], STDIN_FILENO) != 0) {
                     fprintf(stderr, "error: %s\n", "dup2 error");
-                    free(parsed);
                     exit(EXIT_FAILURE);
                 }
             }
@@ -318,7 +302,6 @@ void execPipedCommand2(char* inputStr) {
                 // printf("write to pipe");
                 if (dup2(pipes[commandCount][1], STDOUT_FILENO) != 1) {
                     fprintf(stderr, "error: %s\n", "dup2 error");
-                    free(parsed);
                     exit(EXIT_FAILURE);
                 }
             }
@@ -329,21 +312,18 @@ void execPipedCommand2(char* inputStr) {
             }
 
             if (customCommandHandler(parsed)) {
-                free(parsed);
                 exit(0);
             }
 
             // check if given command is a executable file
             if (!isFile(parsed[0])) {
                 fprintf(stderr, "error: %s\n", "given commands is not a executable file");
-                free(parsed);
                 exit(EXIT_FAILURE);
             }
 
             // printf("not a custom command\n");
             if (execvp(parsed[0], parsed) < 0) {
                 fprintf(stderr, "error: %s\n", "execvp error");
-                free(parsed);
                 exit(EXIT_FAILURE);
             }
         }
@@ -355,7 +335,6 @@ void execPipedCommand2(char* inputStr) {
         wait(NULL);
     }
 
-    free(parsed);
     wait(NULL);  // all numberPipes + 1 child process
     return;
 }
@@ -367,7 +346,6 @@ void sigint_handler(int sig) {
 }
 
 int main() {
-    char* inputStr;  // input commend
     size_t size = 0;
     // printf("%ld", 4096);
 
@@ -398,6 +376,7 @@ int main() {
         } else {
             execPipedCommand2(inputStr);
         }
+
         free(inputStr);
         inputStr = NULL;
     }
