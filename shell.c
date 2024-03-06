@@ -54,8 +54,13 @@ void customCdHandler(char** parsed) {
         return;
     }
 
+    if (parsed[1] != NULL && parsed[1][0] != '/') {
+        fprintf(stderr, "error: %s\n", "Only handle absolute paths");
+        return;
+    }
+
     DIR* dir = opendir(parsed[1]);
-    if (dir) {
+    if (dir) {  // check if destination exist
         /* Directory exists. */
         closedir(dir);
         if (chdir(parsed[1]) != 0) {
@@ -217,6 +222,8 @@ int parseCommandByPipe(char** str, char** firstCommand) {
 }
 
 int isFile(char* command) {
+    if (command != NULL && command[0] != '/') return 0;
+
     if (access(command, F_OK) != 0) return 0;
 
     return 1;
@@ -244,9 +251,9 @@ void execSingleCommand(char* inputStr) {
         wait(NULL);       // waiting for child process to terminate
         return;
     } else { /* child process */
-        if (execvp(parsed[0], parsed) < 0) {
-            fprintf(stderr, "error: %s\n", "execvp error");
-            exit(EXIT_FAILURE);  // if execvp failed
+        if (execv(parsed[0], parsed) < 0) {
+            fprintf(stderr, "error: %s\n", "execv error");
+            exit(EXIT_FAILURE);  // if execv failed
         }
     }
 }
@@ -322,8 +329,8 @@ void execPipedCommand2(char* inputStr) {
             }
 
             // printf("not a custom command\n");
-            if (execvp(parsed[0], parsed) < 0) {
-                fprintf(stderr, "error: %s\n", "execvp error");
+            if (execv(parsed[0], parsed) < 0) {
+                fprintf(stderr, "error: %s\n", "execv error");
                 exit(EXIT_FAILURE);
             }
         }
