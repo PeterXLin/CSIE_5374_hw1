@@ -15,6 +15,7 @@
 
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
+#define MAXARGUMENT _POSIX_ARG_MAX
 
 char* comHistory[MAXHISTORY];  // store history commend
 int numberCommands = 0;
@@ -29,6 +30,7 @@ void cleanup_function() {
     for (int i = 0; i < MAXHISTORY; i++) {
         if (comHistory[i] != NULL) {
             free(comHistory[i]);
+            comHistory[i] = NULL;
         }
     }
 }
@@ -187,7 +189,7 @@ int customCommandHandler(char** parsed) {
 
 // split command by space and store splited command
 void parseCommandBySpace(char* str, char** parsed) {
-    for (long i = 0; i < sysconf(_SC_ARG_MAX); i++) {
+    for (long i = 0; i < MAXARGUMENT; i++) {
         parsed[i] = strsep(&str, " ");  // strsep not only modify string but also modify the address of str
 
         if (parsed[i] == NULL) break;  // finish parsing commandbreak;
@@ -213,8 +215,8 @@ int isFile(char* command) {
 }
 
 void execSingleCommand(char* inputStr) {
-    // char* parsed[sysconf(_SC_ARG_MAX)];
-    char** parsed = (char**)malloc(sysconf(_SC_ARG_MAX) * sizeof(char*));
+    // char* parsed[MAXARGUMENT];
+    char** parsed = (char**)malloc(MAXARGUMENT * sizeof(char*));
     if (parsed == NULL) {
         fprintf(stderr, "error: %s\n", "malloc failed");
         exit(EXIT_FAILURE);
@@ -274,8 +276,8 @@ void execPipedCommand2(char* inputStr) {
     // printf("input command: %s\n", inputStr);
     int numberPipes = countPipe(inputStr);  // pipe amount we need
     int pipes[numberPipes][2];
-    // char* parsed[sysconf(_SC_ARG_MAX)];
-    char** parsed = (char**)malloc(sysconf(_SC_ARG_MAX) * sizeof(char*));
+    // char* parsed[MAXARGUMENT];
+    char** parsed = (char**)malloc(MAXARGUMENT * sizeof(char*));
     if (parsed == NULL) {
         fprintf(stderr, "error: %s\n", "malloc failed");
         exit(EXIT_FAILURE);
@@ -381,6 +383,8 @@ int main() {
         // printDir();
 
         if (getline(&inputStr, &size, stdin) < 2) {  // inputStr include \n
+            free(inputStr);
+            inputStr = NULL;
             continue;
         }
 
@@ -395,6 +399,7 @@ int main() {
             execPipedCommand2(inputStr);
         }
         free(inputStr);
+        inputStr = NULL;
     }
 
     return 0;

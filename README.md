@@ -9,6 +9,20 @@ test
 python2 test/tester.py
 ```
 
+# workflow
+All the codes are in the file shell.c
+
+```mermaid
+graph LR
+A[read input] --> C{command contain pipe}
+    C -->|pipe| D[create pipe]
+    D --> H[handle each command & pipe]
+    C -->|no pipe| E{custom command}
+    E -->|yes| F[use custom command handler to handle]
+    E -->|no| G[fork & execvp]
+```
+
+
 
 # Notes
 difference between char s[] & char* s
